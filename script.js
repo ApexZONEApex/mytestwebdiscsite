@@ -52,7 +52,11 @@ updateUserInfo();
 
 // Обновление списка участников
 function updateMembersList() {
-    const allUsers = getAllUsers();
+    // Используем API для проверки активности
+    const allUsers = window.ModernChatAPI ? 
+        window.ModernChatAPI.checkUsersActivity() : 
+        getAllUsers();
+    
     const onlineContainer = document.getElementById('onlineMembers');
     const offlineContainer = document.getElementById('offlineMembers');
     
@@ -301,6 +305,9 @@ function showVoicePanel(channelName) {
     document.getElementById('voiceChannelName').textContent = channelName;
     panel.classList.remove('hidden');
     
+    // Добавляем класс для отступа снизу
+    document.querySelector('.app').classList.add('voice-active');
+    
     updatePanelControls();
 }
 
@@ -309,6 +316,9 @@ function hideVoicePanel() {
     const modal = document.getElementById('voiceModal');
     panel.classList.add('hidden');
     modal.classList.add('hidden');
+    
+    // Убираем класс отступа
+    document.querySelector('.app').classList.remove('voice-active');
 }
 
 function showVoiceModal() {
@@ -368,12 +378,16 @@ function updateVoiceParticipants() {
 
 // Управление микрофоном
 async function toggleMicrophone() {
-    if (!localStream) return;
+    if (!localStream) {
+        console.error('Нет активного потока');
+        return;
+    }
     
     micEnabled = !micEnabled;
     const audioTrack = localStream.getAudioTracks()[0];
     if (audioTrack) {
         audioTrack.enabled = micEnabled;
+        console.log('Микрофон:', micEnabled ? 'включен' : 'выключен');
     }
     
     updateVoiceControls();
@@ -386,23 +400,31 @@ document.getElementById('panelToggleMic').addEventListener('click', toggleMicrop
 
 // Управление камерой
 async function toggleCameraFunc() {
-    if (!localStream) return;
+    if (!localStream) {
+        console.error('Нет активного потока');
+        return;
+    }
     
     cameraEnabled = !cameraEnabled;
+    console.log('Попытка переключить камеру:', cameraEnabled);
     
     if (cameraEnabled) {
         try {
-            // Остановить текущий поток и создать новый с видео
+            // Остановить текущий поток
             const currentAudioEnabled = micEnabled;
             localStream.getTracks().forEach(track => track.stop());
             
+            // Создать новый поток с видео
             localStream = await navigator.mediaDevices.getUserMedia({ 
                 audio: true, 
                 video: {
                     width: { ideal: 1280 },
-                    height: { ideal: 720 }
+                    height: { ideal: 720 },
+                    facingMode: 'user'
                 }
             });
+            
+            console.log('Камера включена успешно');
             
             // Восстановить состояние аудио
             const audioTrack = localStream.getAudioTracks()[0];
@@ -412,30 +434,29 @@ async function toggleCameraFunc() {
             
         } catch (error) {
             console.error('Ошибка доступа к камере:', error);
-            alert('Не удалось получить доступ к камере. Проверьте разрешения браузера.');
+            alert('Не удалось получить доступ к камере. Проверьте разрешения браузера.\n\nОшибка: ' + error.message);
             cameraEnabled = false;
         }
     } else {
-        // Остановить только видео трек
-        const videoTracks = localStream.getVideoTracks();
-        videoTracks.forEach(track => track.stop());
-        
-        // Создать новый поток только с аудио
+        // Выключить камеру
         try {
             const currentAudioEnabled = micEnabled;
             localStream.getTracks().forEach(track => track.stop());
             
+            // Создать новый поток только с аудио
             localStream = await navigator.mediaDevices.getUserMedia({ 
                 audio: true, 
                 video: false
             });
+            
+            console.log('Камера выключена');
             
             const audioTrack = localStream.getAudioTracks()[0];
             if (audioTrack) {
                 audioTrack.enabled = currentAudioEnabled;
             }
         } catch (error) {
-            console.error('Ошибка:', error);
+            console.error('Ошибка при выключении камеры:', error);
         }
     }
     
@@ -450,23 +471,35 @@ document.getElementById('panelToggleCamera').addEventListener('click', toggleCam
 // Демонстрация экрана
 async function toggleScreenShare() {
     screenEnabled = !screenEnabled;
+    console.log('Попытка переключить демонстрацию экрана:', screenEnabled);
     
     if (screenEnabled) {
         try {
             screenStream = await navigator.mediaDevices.getDisplayMedia({ 
                 video: {
-                    cursor: "always"
+                    cursor: "always",
+                    displaySurface: "monitor"
                 },
                 audio: false
             });
             
+            console.log('Демонстрация экрана включена');
+            
             // Обработка остановки демонстрации через системную кнопку
             screenStream.getVideoTracks()[0].onended = () => {
+                console.log('Демонстрация экрана остановлена пользователем');
                 screenEnabled = false;
                 screenStream = null;
+                
+                // Удалить элемент
+                const screenDiv = document.getElementById('screenShare');
+                if (screenDiv) {
+                    screenDiv.remove();
+                }
+                
                 updateVoiceControls();
                 updateVoiceParticipants();
-                updateMinimizedControls();
+                updatePanelControls();
             };
             
             // Создать элемент для отображения экрана
@@ -489,13 +522,16 @@ async function toggleScreenShare() {
                 container.insertBefore(screenDiv, container.firstChild);
             }
             
-            document.getElementById('screenVideo').srcObject = screenStream;
+            const videoElement = document.getElementById('screenVideo');
+            videoElement.srcObject = screenStream;
             
         } catch (error) {
             console.error('Ошибка демонстрации экрана:', error);
+            alert('Не удалось начать демонстрацию экрана.\n\nОшибка: ' + error.message);
             screenEnabled = false;
         }
     } else {
+        console.log('Остановка демонстрации экрана');
         if (screenStream) {
             screenStream.getTracks().forEach(track => track.stop());
             screenStream = null;
@@ -672,8 +708,23 @@ document.querySelectorAll('.category-header').forEach(header => {
 displayChannelMessages(currentChannel);
 updateMembersList();
 
+// Инициализация API синхронизации
+if (window.ModernChatAPI) {
+    window.ModernChatAPI.initSync();
+    
+    // Слушаем событие обновления пользователей
+    window.addEventListener('usersUpdated', updateMembersList);
+}
+
 // Обновление списка участников каждые 5 секунд
 setInterval(updateMembersList, 5000);
+
+// Обновление активности при любом действии
+document.addEventListener('click', () => {
+    if (window.ModernChatAPI) {
+        window.ModernChatAPI.updateUserActivity();
+    }
+});
 
 console.log('ModernChat загружен! 🚀');
 console.log('Текущий пользователь:', currentUser.username);
