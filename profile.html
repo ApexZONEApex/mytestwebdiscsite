@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Профиль - ModernChat</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="profile.css">
+</head>
+<body>
+    <div class="profile-container">
+        <div class="profile-header">
+            <button class="back-btn" onclick="window.location.href='index.html'">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                </svg>
+                Назад
+            </button>
+            <h1>Мой профиль</h1>
+        </div>
+
+        <div class="profile-content">
+            <div class="profile-card">
+                <div class="profile-banner"></div>
+                <div class="profile-info">
+                    <div class="profile-avatar-container">
+                        <img id="profileAvatar" src="" alt="Avatar" class="profile-avatar">
+                        <div class="status-indicator online"></div>
+                    </div>
+                    <div class="profile-details">
+                        <h2 id="profileUsername">Пользователь</h2>
+                        <p id="profileTag">#0000</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="edit-section">
+                <h3>Редактировать профиль</h3>
+                <form id="profileForm">
+                    <div class="form-group">
+                        <label>Имя пользователя</label>
+                        <input type="text" id="editUsername" placeholder="Ваше имя">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="editEmail" placeholder="example@mail.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Статус</label>
+                        <select id="editStatus">
+                            <option value="online">🟢 Онлайн</option>
+                            <option value="away">🟡 Отошел</option>
+                            <option value="busy">🔴 Не беспокоить</option>
+                            <option value="offline">⚫ Невидимый</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Выберите новый аватар</label>
+                        <div class="avatar-grid" id="avatarGrid"></div>
+                    </div>
+
+                    <button type="submit" class="btn-save">Сохранить изменения</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="profile.js"></script>
+</body>
+</html>
