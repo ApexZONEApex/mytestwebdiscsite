@@ -742,20 +742,35 @@ if (window.FirebaseSync) {
     if (firebaseReady) {
         console.log('✅ Используем Firebase для синхронизации');
         
-        // Обновляем текущего пользователя в Firebase
+        // Устанавливаем статус онлайн
+        currentUser.status = 'online';
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        
+        // Первое обновление - сразу добавляем пользователя
+        window.FirebaseSync.updateUser(currentUser);
+        console.log('👤 Пользователь добавлен в Firebase:', currentUser.username);
+        
+        // Слушаем изменения пользователей
+        window.FirebaseSync.getUsers((users) => {
+            console.log('📡 Получены пользователи из Firebase:', users.length);
+            displayMembers(users);
+        });
+        
+        // Обновляем текущего пользователя каждые 10 секунд
         setInterval(() => {
             if (currentUser) {
+                currentUser.status = 'online';
                 window.FirebaseSync.updateUser(currentUser);
+                console.log('🔄 Обновление активности пользователя');
             }
         }, 10000);
         
-        // Первое обновление
-        window.FirebaseSync.updateUser(currentUser);
     } else {
         console.log('⚠️ Firebase недоступен, используем localStorage');
         initLocalSync();
     }
 } else {
+    console.log('⚠️ FirebaseSync не найден, используем localStorage');
     initLocalSync();
 }
 
