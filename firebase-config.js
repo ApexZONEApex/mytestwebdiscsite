@@ -248,7 +248,10 @@ function joinVoiceChannelFirebase(channelName, user) {
     console.log('🎤 Подключение к голосовому каналу:', channelName, '(encoded:', encodedChannel, ')');
 
     const userKey = user.email.replace(/[.#$[\]]/g, '_');
-    voiceChannelsRef.child(encodedChannel).child(userKey).set({
+    const userRef = voiceChannelsRef.child(encodedChannel).child(userKey);
+
+    // Устанавливаем данные пользователя
+    userRef.set({
         username: user.username,
         email: user.email,
         avatar: user.avatar,
@@ -256,6 +259,10 @@ function joinVoiceChannelFirebase(channelName, user) {
         cameraEnabled: false,
         timestamp: Date.now()
     });
+
+    // ВАЖНО: Автоматически удалить пользователя при отключении от Firebase
+    userRef.onDisconnect().remove();
+    console.log('🔌 Установлен onDisconnect для автоматического удаления при отключении');
 }
 
 // Выход из голосового канала
@@ -293,19 +300,32 @@ function subscribeToAllVoiceChannels(callback) {
     console.log('📡 Подписка на все голосовые каналы');
     voiceChannelsRef.on('value', (snapshot) => {
         const channels = {};
+        const now = Date.now();
+        const maxAge = 60000; // 60 секунд максимум неактивности
 
         snapshot.forEach((channelSnapshot) => {
             const channelName = channelSnapshot.key;
             const users = [];
 
             channelSnapshot.forEach((userSnapshot) => {
-                users.push(userSnapshot.val());
+                const user = userSnapshot.val();
+
+                // Проверяем, не устарел ли пользователь
+                if (user.timestamp && (now - user.timestamp) < maxAge) {
+                    users.push(user);
+                } else if (user.timestamp && (now - user.timestamp) >= maxAge) {
+                    // Автоматически удаляем устаревшего пользователя
+                    console.log('🧹 Удаление устаревшего пользователя из голосового канала:', user.username);
+                    userSnapshot.ref.remove();
+                }
             });
 
-            channels[channelName] = users;
+            if (users.length > 0) {
+                channels[channelName] = users;
+            }
         });
 
-        console.log('📊 Голосовые каналы обновлены:', channels);
+        console.log('📊 Голосовые каналы обновлены:', Object.keys(channels).length, 'каналов');
         callback(channels);
     });
 }

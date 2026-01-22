@@ -284,6 +284,8 @@ document.querySelectorAll('.channel.voice').forEach(voiceChannel => {
     });
 });
 
+let voiceHeartbeatInterval = null;
+
 async function joinVoiceChannel(channelName, channelElement) {
     try {
         // Запрос доступа к микрофону
@@ -304,6 +306,16 @@ async function joinVoiceChannel(channelName, channelElement) {
                 console.log('🎧 Участники голосового канала:', users);
                 updateVoiceParticipantsFromFirebase(users);
             });
+
+            // Heartbeat - обновляем timestamp каждые 30 секунд
+            voiceHeartbeatInterval = setInterval(() => {
+                if (inVoiceChannel && currentVoiceChannel) {
+                    window.FirebaseSync.updateVoiceState(currentVoiceChannel, currentUser, {
+                        timestamp: Date.now()
+                    });
+                    console.log('💓 Heartbeat - обновление timestamp в голосовом канале');
+                }
+            }, 30000);
         }
 
         // Визуальное обозначение
@@ -331,6 +343,12 @@ async function joinVoiceChannel(channelName, channelElement) {
 
 function leaveVoiceChannel() {
     if (!inVoiceChannel) return;
+
+    // Останавливаем heartbeat
+    if (voiceHeartbeatInterval) {
+        clearInterval(voiceHeartbeatInterval);
+        voiceHeartbeatInterval = null;
+    }
 
     // Удаляем из Firebase
     if (window.FirebaseSync && typeof firebase !== 'undefined' && currentVoiceChannel) {
@@ -846,6 +864,9 @@ updateMembersList();
 
 // Функция обновления отображения участников голосовых каналов в боковой панели
 function updateVoiceChannelParticipants(channels) {
+    // Сначала удаляем ВСЕ старые списки участников
+    document.querySelectorAll('.voice-users-list').forEach(el => el.remove());
+
     document.querySelectorAll('.channel.voice').forEach(voiceChannel => {
         const channelName = voiceChannel.querySelector('span').textContent;
 
@@ -856,10 +877,6 @@ function updateVoiceChannelParticipants(channels) {
         // Удаляем старый счётчик если есть
         const oldCounter = voiceChannel.querySelector('.voice-users-count');
         if (oldCounter) oldCounter.remove();
-
-        // Удаляем старый список участников
-        const oldUsersList = voiceChannel.querySelector('.voice-users-list');
-        if (oldUsersList) oldUsersList.remove();
 
         if (users.length > 0) {
             // Добавляем счётчик участников
@@ -872,6 +889,7 @@ function updateVoiceChannelParticipants(channels) {
             // Добавляем список участников под каналом
             const usersList = document.createElement('div');
             usersList.className = 'voice-users-list';
+            usersList.setAttribute('data-channel', encodedName);
             usersList.style.cssText = 'padding-left: 30px; margin-top: 5px;';
 
             users.forEach(user => {
@@ -952,6 +970,16 @@ function initLocalSync() {
 
 // Обновление списка участников каждые 5 секунд
 setInterval(updateMembersList, 5000);
+
+// При закрытии/обновлении страницы выходим из голосового канала
+window.addEventListener('beforeunload', () => {
+    if (inVoiceChannel && currentVoiceChannel) {
+        // Синхронный вызов для выхода из канала
+        if (window.FirebaseSync && typeof firebase !== 'undefined') {
+            window.FirebaseSync.leaveVoiceChannel(currentVoiceChannel, currentUser);
+        }
+    }
+});
 
 console.log('ModernChat загружен! 🚀');
 console.log('Текущий пользователь:', currentUser.username);
