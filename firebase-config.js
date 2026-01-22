@@ -1,13 +1,13 @@
 // Firebase конфигурация для синхронизации пользователей между устройствами
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC7U1Nx9TtpEgQWWTNMLO2sY2sWbDkpc1c",
-  authDomain: "dfgdfgdfg-1973e.firebaseapp.com",
-  databaseURL: "https://dfgdfgdfg-1973e-default-rtdb.firebaseio.com",
-  projectId: "dfgdfgdfg-1973e",
-  storageBucket: "dfgdfgdfg-1973e.firebasestorage.app",
-  messagingSenderId: "921987023467",
-  appId: "1:921987023467:web:fe94649da3f540c9cfe72e"
+    apiKey: "AIzaSyC7U1Nx9TtpEgQWWTNMLO2sY2sWbDkpc1c",
+    authDomain: "dfgdfgdfg-1973e.firebaseapp.com",
+    databaseURL: "https://dfgdfgdfg-1973e-default-rtdb.firebaseio.com",
+    projectId: "dfgdfgdfg-1973e",
+    storageBucket: "dfgdfgdfg-1973e.firebasestorage.app",
+    messagingSenderId: "921987023467",
+    appId: "1:921987023467:web:fe94649da3f540c9cfe72e"
 };
 
 console.log('🔧 Firebase config loaded');
@@ -18,19 +18,26 @@ let database = null;
 let usersRef = null;
 let messagesRef = null;
 let voiceChannelsRef = null;
+let firebaseInitialized = false;
+let currentMessageListener = null; // Для отслеживания текущей подписки на сообщения
+
+// Кодирование имени канала для Firebase (кириллица и спецсимволы)
+function encodeChannelName(name) {
+    return encodeURIComponent(name).replace(/[.#$[\]]/g, '_');
+}
 
 // Инициализация Firebase
 function initFirebase() {
     try {
         console.log('🚀 Начало инициализации Firebase...');
-        
+
         // Проверяем наличие Firebase
         if (typeof firebase === 'undefined') {
             console.error('❌ Firebase SDK не загружен!');
             return false;
         }
         console.log('✅ Firebase SDK загружен');
-        
+
         // Инициализируем Firebase
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
@@ -38,23 +45,26 @@ function initFirebase() {
         } else {
             console.log('ℹ️ Firebase приложение уже инициализировано');
         }
-        
+
         // Получаем ссылку на базу данных
         database = firebase.database();
         console.log('✅ Database reference получен');
-        
+
         usersRef = database.ref('users');
         console.log('✅ Users reference получен');
-        
+
         messagesRef = database.ref('messages');
         console.log('✅ Messages reference получен');
-        
+
         voiceChannelsRef = database.ref('voiceChannels');
         console.log('✅ Voice channels reference получен');
-        
+
         // Тестовая запись
         testFirebaseConnection();
-        
+
+        firebaseInitialized = true;
+        console.log('🎯 Firebase полностью инициализирован');
+
         return true;
     } catch (error) {
         console.error('❌ Ошибка инициализации Firebase:', error);
@@ -66,7 +76,7 @@ function initFirebase() {
 // Тестовое подключение
 function testFirebaseConnection() {
     console.log('🧪 Тестирование подключения к Firebase...');
-    
+
     database.ref('.info/connected').on('value', (snapshot) => {
         if (snapshot.val() === true) {
             console.log('✅ Подключение к Firebase установлено!');
@@ -82,9 +92,9 @@ function updateUserInFirebase(user) {
         console.error('❌ usersRef не инициализирован');
         return;
     }
-    
+
     console.log('� Запись пользователя:', user.username, '(' + user.email + ')');
-    
+
     const userKey = user.email.replace(/[.#$[\]]/g, '_');
     const userData = {
         username: user.username,
@@ -93,9 +103,9 @@ function updateUserInFirebase(user) {
         status: user.status || 'online',
         lastSeen: Date.now()
     };
-    
+
     console.log('📦 Данные для записи:', userData);
-    
+
     usersRef.child(userKey).set(userData)
         .then(() => {
             console.log('✅ Пользователь успешно записан в Firebase!');
@@ -113,36 +123,36 @@ function getUsersFromFirebase(callback) {
         console.error('❌ usersRef не инициализирован для чтения');
         return;
     }
-    
+
     console.log('👂 Подписка на изменения пользователей...');
-    
+
     usersRef.on('value', (snapshot) => {
         const users = [];
         const now = Date.now();
         const data = snapshot.val();
-        
+
         console.log('📡 Получены данные из Firebase:', data);
-        
+
         if (!data) {
             console.log('ℹ️ База данных пуста');
             callback([]);
             return;
         }
-        
+
         snapshot.forEach((childSnapshot) => {
             const user = childSnapshot.val();
-            
+
             // Проверяем активность (оффлайн если нет активности 60 секунд)
             if (user.lastSeen && (now - user.lastSeen) > 60000) {
                 user.status = 'offline';
             }
-            
+
             users.push(user);
         });
-        
+
         console.log('👥 Найдено пользователей:', users.length);
         users.forEach(u => console.log('  - ' + u.username + ' (' + u.status + ')'));
-        
+
         callback(users);
     }, (error) => {
         console.error('❌ Ошибка чтения пользователей:', error);
@@ -154,7 +164,7 @@ function getUsersFromFirebase(callback) {
 // Отключение от Firebase при выходе
 function disconnectFromFirebase() {
     if (!usersRef) return;
-    
+
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
     if (currentUser) {
         const userKey = currentUser.email.replace(/[.#$[\]]/g, '_');
@@ -172,10 +182,11 @@ function saveMessageToFirebase(channel, message) {
         console.error('❌ messagesRef не инициализирован');
         return;
     }
-    
-    console.log('💬 Сохранение сообщения в канал:', channel);
-    
-    messagesRef.child(channel).push({
+
+    const encodedChannel = encodeChannelName(channel);
+    console.log('💬 Сохранение сообщения в канал:', channel, '(encoded:', encodedChannel, ')');
+
+    messagesRef.child(encodedChannel).push({
         author: message.author,
         avatar: message.avatar,
         text: message.text,
@@ -195,19 +206,35 @@ function getMessagesFromFirebase(channel, callback) {
         console.error('❌ messagesRef не инициализирован');
         return;
     }
-    
-    console.log('📨 Подписка на сообщения канала:', channel);
-    
-    messagesRef.child(channel).on('value', (snapshot) => {
+
+    const encodedChannel = encodeChannelName(channel);
+    console.log('📨 Подписка на сообщения канала:', channel, '(encoded:', encodedChannel, ')');
+
+    // Отписаться от предыдущего канала если есть
+    if (currentMessageListener) {
+        console.log('🔇 Отписка от предыдущего канала');
+        currentMessageListener.ref.off('value', currentMessageListener.callback);
+    }
+
+    const channelRef = messagesRef.child(encodedChannel);
+    const listenerCallback = (snapshot) => {
         const messages = [];
-        
+
         snapshot.forEach((childSnapshot) => {
             messages.push(childSnapshot.val());
         });
-        
+
         console.log('📬 Получено сообщений:', messages.length);
         callback(messages);
-    });
+    };
+
+    // Сохранить ссылку на listener для последующей отписки
+    currentMessageListener = {
+        ref: channelRef,
+        callback: listenerCallback
+    };
+
+    channelRef.on('value', listenerCallback);
 }
 
 // Добавление пользователя в голосовой канал
@@ -216,11 +243,12 @@ function joinVoiceChannelFirebase(channelName, user) {
         console.error('❌ voiceChannelsRef не инициализирован');
         return;
     }
-    
-    console.log('🎤 Подключение к голосовому каналу:', channelName);
-    
+
+    const encodedChannel = encodeChannelName(channelName);
+    console.log('🎤 Подключение к голосовому каналу:', channelName, '(encoded:', encodedChannel, ')');
+
     const userKey = user.email.replace(/[.#$[\]]/g, '_');
-    voiceChannelsRef.child(channelName).child(userKey).set({
+    voiceChannelsRef.child(encodedChannel).child(userKey).set({
         username: user.username,
         email: user.email,
         avatar: user.avatar,
@@ -233,35 +261,62 @@ function joinVoiceChannelFirebase(channelName, user) {
 // Выход из голосового канала
 function leaveVoiceChannelFirebase(channelName, user) {
     if (!voiceChannelsRef) return;
-    
+
+    const encodedChannel = encodeChannelName(channelName);
     console.log('🔇 Выход из голосового канала:', channelName);
-    
+
     const userKey = user.email.replace(/[.#$[\]]/g, '_');
-    voiceChannelsRef.child(channelName).child(userKey).remove();
+    voiceChannelsRef.child(encodedChannel).child(userKey).remove();
 }
 
 // Получение участников голосового канала
 function getVoiceChannelUsers(channelName, callback) {
     if (!voiceChannelsRef) return;
-    
-    voiceChannelsRef.child(channelName).on('value', (snapshot) => {
+
+    const encodedChannel = encodeChannelName(channelName);
+    voiceChannelsRef.child(encodedChannel).on('value', (snapshot) => {
         const users = [];
-        
+
         snapshot.forEach((childSnapshot) => {
             users.push(childSnapshot.val());
         });
-        
-        console.log('🎧 Участников в голосовом канале:', users.length);
+
+        console.log('🎧 Участников в голосовом канале', channelName + ':', users.length);
         callback(users);
+    });
+}
+
+// Подписка на ВСЕ голосовые каналы для отображения участников в боковой панели
+function subscribeToAllVoiceChannels(callback) {
+    if (!voiceChannelsRef) return;
+
+    console.log('📡 Подписка на все голосовые каналы');
+    voiceChannelsRef.on('value', (snapshot) => {
+        const channels = {};
+
+        snapshot.forEach((channelSnapshot) => {
+            const channelName = channelSnapshot.key;
+            const users = [];
+
+            channelSnapshot.forEach((userSnapshot) => {
+                users.push(userSnapshot.val());
+            });
+
+            channels[channelName] = users;
+        });
+
+        console.log('📊 Голосовые каналы обновлены:', channels);
+        callback(channels);
     });
 }
 
 // Обновление состояния в голосовом канале
 function updateVoiceState(channelName, user, state) {
     if (!voiceChannelsRef) return;
-    
+
+    const encodedChannel = encodeChannelName(channelName);
     const userKey = user.email.replace(/[.#$[\]]/g, '_');
-    voiceChannelsRef.child(channelName).child(userKey).update(state);
+    voiceChannelsRef.child(encodedChannel).child(userKey).update(state);
 }
 
 // Автоматическое отключение при закрытии страницы
@@ -270,6 +325,7 @@ window.addEventListener('beforeunload', disconnectFromFirebase);
 // Экспорт функций
 window.FirebaseSync = {
     init: initFirebase,
+    isReady: () => firebaseInitialized,
     updateUser: updateUserInFirebase,
     getUsers: getUsersFromFirebase,
     saveMessage: saveMessageToFirebase,
@@ -277,6 +333,7 @@ window.FirebaseSync = {
     joinVoiceChannel: joinVoiceChannelFirebase,
     leaveVoiceChannel: leaveVoiceChannelFirebase,
     getVoiceChannelUsers: getVoiceChannelUsers,
+    subscribeToAllVoiceChannels: subscribeToAllVoiceChannels,
     updateVoiceState: updateVoiceState,
     disconnect: disconnectFromFirebase
 };

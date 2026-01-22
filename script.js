@@ -20,13 +20,13 @@ function getAllUsers() {
 function registerCurrentUser() {
     let allUsers = getAllUsers();
     const existingIndex = allUsers.findIndex(u => u.email === currentUser.email);
-    
+
     if (existingIndex >= 0) {
         allUsers[existingIndex] = currentUser;
     } else {
         allUsers.push(currentUser);
     }
-    
+
     localStorage.setItem('allUsers', JSON.stringify(allUsers));
 }
 
@@ -39,10 +39,10 @@ function updateUserInfo() {
         document.getElementById('currentUserAvatar').src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.avatar}`;
         document.getElementById('currentUsername').textContent = currentUser.username;
         document.getElementById('currentUserTag').textContent = `#${currentUser.email.split('@')[0].slice(0, 4).padStart(4, '0')}`;
-        
+
         const statusIndicator = document.getElementById('currentUserStatus');
         statusIndicator.className = 'status-indicator ' + (currentUser.status || 'online');
-        
+
         registerCurrentUser();
         updateMembersList();
     }
@@ -59,8 +59,8 @@ function updateMembersList() {
         });
     } else {
         // Иначе используем localStorage
-        const allUsers = window.ModernChatAPI ? 
-            window.ModernChatAPI.checkUsersActivity() : 
+        const allUsers = window.ModernChatAPI ?
+            window.ModernChatAPI.checkUsersActivity() :
             getAllUsers();
         displayMembers(allUsers);
     }
@@ -69,14 +69,14 @@ function updateMembersList() {
 function displayMembers(allUsers) {
     const onlineContainer = document.getElementById('onlineMembers');
     const offlineContainer = document.getElementById('offlineMembers');
-    
+
     // Очистка
     onlineContainer.innerHTML = '<div class="members-header">ОНЛАЙН — <span id="onlineCount">0</span></div>';
     offlineContainer.innerHTML = '<div class="members-header">ОФФЛАЙН — <span id="offlineCount">0</span></div>';
-    
+
     let onlineCount = 0;
     let offlineCount = 0;
-    
+
     allUsers.forEach(user => {
         const isOnline = user.status === 'online';
         const memberDiv = document.createElement('div');
@@ -86,7 +86,7 @@ function displayMembers(allUsers) {
             <div class="status-indicator ${user.status || 'offline'}"></div>
             <span class="member-name">${user.username}</span>
         `;
-        
+
         if (isOnline) {
             onlineContainer.appendChild(memberDiv);
             onlineCount++;
@@ -95,7 +95,7 @@ function displayMembers(allUsers) {
             offlineCount++;
         }
     });
-    
+
     document.getElementById('onlineCount').textContent = onlineCount;
     document.getElementById('offlineCount').textContent = offlineCount;
 }
@@ -122,41 +122,41 @@ let currentChannel = 'общий';
 function displayChannelMessages(channelName) {
     const messagesContainer = document.getElementById('messagesContainer');
     messagesContainer.innerHTML = '';
-    
+
     // Если Firebase доступен, используем его
     if (window.FirebaseSync && typeof firebase !== 'undefined') {
         // Отписываемся от предыдущего канала
         if (window.currentChannelListener) {
             // Firebase автоматически управляет подписками
         }
-        
+
         window.FirebaseSync.getMessages(channelName, (messages) => {
             messagesContainer.innerHTML = '';
-            
+
             if (messages.length === 0) {
                 showEmptyChannel(channelName);
                 return;
             }
-            
+
             messages.forEach(msg => {
                 addMessageToDOM(msg);
             });
-            
+
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         });
     } else {
         // Используем localStorage
         const messages = getChannelMessages(channelName);
-        
+
         if (messages.length === 0) {
             showEmptyChannel(channelName);
             return;
         }
-        
+
         messages.forEach(msg => {
             addMessageToDOM(msg);
         });
-        
+
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 }
@@ -205,7 +205,7 @@ messageInput.addEventListener('keypress', (e) => {
 function sendMessage(text) {
     const now = new Date();
     const time = `Сегодня в ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-    
+
     const message = {
         author: currentUser.username,
         avatar: currentUser.avatar,
@@ -213,11 +213,11 @@ function sendMessage(text) {
         text: escapeHtml(text),
         userId: currentUser.email
     };
-    
+
     console.log('📤 Отправка сообщения:', message);
     console.log('📍 Текущий канал:', currentChannel);
     console.log('🔥 Firebase доступен:', !!(window.FirebaseSync && typeof firebase !== 'undefined'));
-    
+
     // Если Firebase доступен, используем его
     if (window.FirebaseSync && typeof firebase !== 'undefined') {
         console.log('✅ Используем Firebase для сообщения');
@@ -248,10 +248,10 @@ document.querySelectorAll('.channel:not(.voice)').forEach(channel => {
         if (channelName) {
             document.querySelectorAll('.channel:not(.voice)').forEach(ch => ch.classList.remove('active'));
             channel.classList.add('active');
-            
+
             currentChannel = channelName;
             displayChannelMessages(channelName);
-            
+
             document.querySelector('.channel-info h3').textContent = channelName;
             document.querySelector('.message-input').placeholder = `Написать сообщение в #${channelName}`;
         }
@@ -275,7 +275,7 @@ let screenEnabled = false;
 document.querySelectorAll('.channel.voice').forEach(voiceChannel => {
     voiceChannel.addEventListener('click', () => {
         const voiceChannelName = voiceChannel.querySelector('span').textContent;
-        
+
         if (inVoiceChannel && currentVoiceChannel === voiceChannelName) {
             leaveVoiceChannel();
         } else {
@@ -287,42 +287,42 @@ document.querySelectorAll('.channel.voice').forEach(voiceChannel => {
 async function joinVoiceChannel(channelName, channelElement) {
     try {
         // Запрос доступа к микрофону
-        localStream = await navigator.mediaDevices.getUserMedia({ 
-            audio: true, 
-            video: false 
+        localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false
         });
-        
+
         inVoiceChannel = true;
         currentVoiceChannel = channelName;
-        
+
         // Добавляем в Firebase
         if (window.FirebaseSync && typeof firebase !== 'undefined') {
             window.FirebaseSync.joinVoiceChannel(channelName, currentUser);
-            
+
             // Слушаем участников канала
             window.FirebaseSync.getVoiceChannelUsers(channelName, (users) => {
                 console.log('🎧 Участники голосового канала:', users);
                 updateVoiceParticipantsFromFirebase(users);
             });
         }
-        
+
         // Визуальное обозначение
         document.querySelectorAll('.channel.voice').forEach(ch => {
             ch.classList.remove('in-voice');
             ch.style.background = '';
             ch.style.borderLeft = '';
         });
-        
+
         channelElement.classList.add('in-voice');
         channelElement.style.background = 'rgba(102, 126, 234, 0.2)';
         channelElement.style.borderLeft = '3px solid #667eea';
-        
+
         // Показать компактную панель внизу
         showVoicePanel(channelName);
-        
+
         // Системное сообщение
         addSystemMessage(`Вы подключились к голосовому каналу "${channelName}"`);
-        
+
     } catch (error) {
         console.error('Ошибка доступа к микрофону:', error);
         alert('Не удалось получить доступ к микрофону. Проверьте разрешения браузера.');
@@ -331,27 +331,27 @@ async function joinVoiceChannel(channelName, channelElement) {
 
 function leaveVoiceChannel() {
     if (!inVoiceChannel) return;
-    
+
     // Удаляем из Firebase
     if (window.FirebaseSync && typeof firebase !== 'undefined' && currentVoiceChannel) {
         window.FirebaseSync.leaveVoiceChannel(currentVoiceChannel, currentUser);
     }
-    
+
     // Остановка всех потоков
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
         localStream = null;
     }
-    
+
     if (screenStream) {
         screenStream.getTracks().forEach(track => track.stop());
         screenStream = null;
     }
-    
+
     // Закрытие всех соединений
     Object.values(peerConnections).forEach(pc => pc.close());
     peerConnections = {};
-    
+
     // Сброс состояния
     const voiceChannels = document.querySelectorAll('.channel.voice');
     voiceChannels.forEach(ch => {
@@ -359,12 +359,12 @@ function leaveVoiceChannel() {
         ch.style.background = '';
         ch.style.borderLeft = '';
     });
-    
+
     inVoiceChannel = false;
     micEnabled = true;
     cameraEnabled = false;
     screenEnabled = false;
-    
+
     hideVoicePanel();
     addSystemMessage('Вы отключились от голосового канала');
     currentVoiceChannel = null;
@@ -375,10 +375,10 @@ function showVoicePanel(channelName) {
     document.getElementById('voicePanelChannelName').textContent = channelName;
     document.getElementById('voiceChannelName').textContent = channelName;
     panel.classList.remove('hidden');
-    
+
     // Добавляем класс для отступа снизу
     document.querySelector('.app').classList.add('voice-active');
-    
+
     updatePanelControls();
 }
 
@@ -387,7 +387,7 @@ function hideVoicePanel() {
     const modal = document.getElementById('voiceModal');
     panel.classList.add('hidden');
     modal.classList.add('hidden');
-    
+
     // Убираем класс отступа
     document.querySelector('.app').classList.remove('voice-active');
 }
@@ -413,7 +413,7 @@ document.getElementById('modalDisconnect').addEventListener('click', leaveVoiceC
 function updateVoiceParticipants() {
     const container = document.getElementById('voiceParticipants');
     container.innerHTML = '';
-    
+
     // Добавить себя
     const selfDiv = document.createElement('div');
     selfDiv.className = 'voice-participant';
@@ -424,22 +424,22 @@ function updateVoiceParticipants() {
             <div class="participant-details">
                 <span class="participant-name">${currentUser.username} (Вы)</span>
                 <div class="participant-status">
-                    ${micEnabled ? 
-                        '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/></svg>' : 
-                        '<svg class="status-icon muted" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>'
-                    }
-                    ${cameraEnabled ? 
-                        '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>' : ''
-                    }
-                    ${screenEnabled ? 
-                        '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4z"/></svg>' : ''
-                    }
+                    ${micEnabled ?
+            '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/></svg>' :
+            '<svg class="status-icon muted" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>'
+        }
+                    ${cameraEnabled ?
+            '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>' : ''
+        }
+                    ${screenEnabled ?
+            '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4z"/></svg>' : ''
+        }
                 </div>
             </div>
         </div>
     `;
     container.appendChild(selfDiv);
-    
+
     // Подключить локальный поток к видео
     if (cameraEnabled && localStream) {
         const videoElement = document.getElementById('localVideo');
@@ -450,14 +450,14 @@ function updateVoiceParticipants() {
 function updateVoiceParticipantsFromFirebase(users) {
     const container = document.getElementById('voiceParticipants');
     container.innerHTML = '';
-    
+
     users.forEach(user => {
         const isCurrentUser = user.email === currentUser.email;
         const participantDiv = document.createElement('div');
         participantDiv.className = 'voice-participant';
         participantDiv.innerHTML = `
-            ${isCurrentUser && cameraEnabled ? 
-                '<video id="localVideo" autoplay muted playsinline></video>' : 
+            ${isCurrentUser && cameraEnabled ?
+                '<video id="localVideo" autoplay muted playsinline></video>' :
                 ''
             }
             <div class="participant-info">
@@ -465,20 +465,20 @@ function updateVoiceParticipantsFromFirebase(users) {
                 <div class="participant-details">
                     <span class="participant-name">${user.username}${isCurrentUser ? ' (Вы)' : ''}</span>
                     <div class="participant-status">
-                        ${user.micEnabled ? 
-                            '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/></svg>' : 
-                            '<svg class="status-icon muted" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>'
-                        }
-                        ${user.cameraEnabled ? 
-                            '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>' : ''
-                        }
+                        ${user.micEnabled ?
+                '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/></svg>' :
+                '<svg class="status-icon muted" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>'
+            }
+                        ${user.cameraEnabled ?
+                '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>' : ''
+            }
                     </div>
                 </div>
             </div>
         `;
         container.appendChild(participantDiv);
     });
-    
+
     // Подключить локальный поток к видео
     if (cameraEnabled && localStream) {
         const videoElement = document.getElementById('localVideo');
@@ -494,21 +494,21 @@ async function toggleMicrophone() {
         console.error('Нет активного потока');
         return;
     }
-    
+
     micEnabled = !micEnabled;
     const audioTrack = localStream.getAudioTracks()[0];
     if (audioTrack) {
         audioTrack.enabled = micEnabled;
         console.log('Микрофон:', micEnabled ? 'включен' : 'выключен');
     }
-    
+
     // Обновляем состояние в Firebase
     if (window.FirebaseSync && typeof firebase !== 'undefined' && currentVoiceChannel) {
         window.FirebaseSync.updateVoiceState(currentVoiceChannel, currentUser, {
             micEnabled: micEnabled
         });
     }
-    
+
     updateVoiceControls();
     updateVoiceParticipants();
     updatePanelControls();
@@ -523,34 +523,34 @@ async function toggleCameraFunc() {
         console.error('Нет активного потока');
         return;
     }
-    
+
     cameraEnabled = !cameraEnabled;
     console.log('Попытка переключить камеру:', cameraEnabled);
-    
+
     if (cameraEnabled) {
         try {
             // Остановить текущий поток
             const currentAudioEnabled = micEnabled;
             localStream.getTracks().forEach(track => track.stop());
-            
+
             // Создать новый поток с видео
-            localStream = await navigator.mediaDevices.getUserMedia({ 
-                audio: true, 
+            localStream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
                 video: {
                     width: { ideal: 1280 },
                     height: { ideal: 720 },
                     facingMode: 'user'
                 }
             });
-            
+
             console.log('Камера включена успешно');
-            
+
             // Восстановить состояние аудио
             const audioTrack = localStream.getAudioTracks()[0];
             if (audioTrack) {
                 audioTrack.enabled = currentAudioEnabled;
             }
-            
+
         } catch (error) {
             console.error('Ошибка доступа к камере:', error);
             alert('Не удалось получить доступ к камере. Проверьте разрешения браузера.\n\nОшибка: ' + error.message);
@@ -561,15 +561,15 @@ async function toggleCameraFunc() {
         try {
             const currentAudioEnabled = micEnabled;
             localStream.getTracks().forEach(track => track.stop());
-            
+
             // Создать новый поток только с аудио
-            localStream = await navigator.mediaDevices.getUserMedia({ 
-                audio: true, 
+            localStream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
                 video: false
             });
-            
+
             console.log('Камера выключена');
-            
+
             const audioTrack = localStream.getAudioTracks()[0];
             if (audioTrack) {
                 audioTrack.enabled = currentAudioEnabled;
@@ -578,7 +578,7 @@ async function toggleCameraFunc() {
             console.error('Ошибка при выключении камеры:', error);
         }
     }
-    
+
     updateVoiceControls();
     updateVoiceParticipants();
     updatePanelControls();
@@ -591,40 +591,40 @@ document.getElementById('panelToggleCamera').addEventListener('click', toggleCam
 async function toggleScreenShare() {
     screenEnabled = !screenEnabled;
     console.log('Попытка переключить демонстрацию экрана:', screenEnabled);
-    
+
     if (screenEnabled) {
         try {
-            screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+            screenStream = await navigator.mediaDevices.getDisplayMedia({
                 video: {
                     cursor: "always",
                     displaySurface: "monitor"
                 },
                 audio: false
             });
-            
+
             console.log('Демонстрация экрана включена');
-            
+
             // Обработка остановки демонстрации через системную кнопку
             screenStream.getVideoTracks()[0].onended = () => {
                 console.log('Демонстрация экрана остановлена пользователем');
                 screenEnabled = false;
                 screenStream = null;
-                
+
                 // Удалить элемент
                 const screenDiv = document.getElementById('screenShare');
                 if (screenDiv) {
                     screenDiv.remove();
                 }
-                
+
                 updateVoiceControls();
                 updateVoiceParticipants();
                 updatePanelControls();
             };
-            
+
             // Создать элемент для отображения экрана
             const container = document.getElementById('voiceParticipants');
             let screenDiv = document.getElementById('screenShare');
-            
+
             if (!screenDiv) {
                 screenDiv = document.createElement('div');
                 screenDiv.id = 'screenShare';
@@ -640,10 +640,10 @@ async function toggleScreenShare() {
                 `;
                 container.insertBefore(screenDiv, container.firstChild);
             }
-            
+
             const videoElement = document.getElementById('screenVideo');
             videoElement.srcObject = screenStream;
-            
+
         } catch (error) {
             console.error('Ошибка демонстрации экрана:', error);
             alert('Не удалось начать демонстрацию экрана.\n\nОшибка: ' + error.message);
@@ -655,13 +655,13 @@ async function toggleScreenShare() {
             screenStream.getTracks().forEach(track => track.stop());
             screenStream = null;
         }
-        
+
         const screenDiv = document.getElementById('screenShare');
         if (screenDiv) {
             screenDiv.remove();
         }
     }
-    
+
     updateVoiceControls();
     updateVoiceParticipants();
     updatePanelControls();
@@ -674,7 +674,7 @@ function updateVoiceControls() {
     const micBtn = document.getElementById('toggleMic');
     const cameraBtn = document.getElementById('toggleCamera');
     const screenBtn = document.getElementById('toggleScreen');
-    
+
     // Микрофон
     if (micEnabled) {
         micBtn.classList.remove('disabled');
@@ -691,14 +691,14 @@ function updateVoiceControls() {
             </svg>
         `;
     }
-    
+
     // Камера
     if (cameraEnabled) {
         cameraBtn.classList.add('active');
     } else {
         cameraBtn.classList.remove('active');
     }
-    
+
     // Экран
     if (screenEnabled) {
         screenBtn.classList.add('active');
@@ -711,7 +711,7 @@ function updatePanelControls() {
     const panelMicBtn = document.getElementById('panelToggleMic');
     const panelCameraBtn = document.getElementById('panelToggleCamera');
     const panelScreenBtn = document.getElementById('panelToggleScreen');
-    
+
     // Микрофон
     if (micEnabled) {
         panelMicBtn.classList.remove('disabled');
@@ -728,14 +728,14 @@ function updatePanelControls() {
             </svg>
         `;
     }
-    
+
     // Камера
     if (cameraEnabled) {
         panelCameraBtn.classList.add('active');
     } else {
         panelCameraBtn.classList.remove('active');
     }
-    
+
     // Экран
     if (screenEnabled) {
         panelScreenBtn.classList.add('active');
@@ -760,7 +760,7 @@ micBtn.addEventListener('click', () => {
 
 headphonesBtn.addEventListener('click', () => {
     const muted = headphonesBtn.classList.toggle('muted');
-    
+
     if (muted) {
         headphonesBtn.style.background = '#ed4245';
         headphonesBtn.innerHTML = `
@@ -785,10 +785,10 @@ logoutBtn.addEventListener('click', () => {
         if (inVoiceChannel) {
             leaveVoiceChannel();
         }
-        
+
         // Очистить данные текущего пользователя
         localStorage.removeItem('currentUser');
-        
+
         // Перенаправить на страницу авторизации
         window.location.href = 'auth.html';
     }
@@ -844,36 +844,88 @@ document.querySelectorAll('.category-header').forEach(header => {
 displayChannelMessages(currentChannel);
 updateMembersList();
 
+// Функция обновления отображения участников голосовых каналов в боковой панели
+function updateVoiceChannelParticipants(channels) {
+    document.querySelectorAll('.channel.voice').forEach(voiceChannel => {
+        const channelName = voiceChannel.querySelector('span').textContent;
+
+        // Ищем участников по закодированному имени канала
+        const encodedName = encodeURIComponent(channelName).replace(/[.#$[\]]/g, '_');
+        const users = channels[encodedName] || [];
+
+        // Удаляем старый счётчик если есть
+        const oldCounter = voiceChannel.querySelector('.voice-users-count');
+        if (oldCounter) oldCounter.remove();
+
+        // Удаляем старый список участников
+        const oldUsersList = voiceChannel.querySelector('.voice-users-list');
+        if (oldUsersList) oldUsersList.remove();
+
+        if (users.length > 0) {
+            // Добавляем счётчик участников
+            const counter = document.createElement('span');
+            counter.className = 'voice-users-count';
+            counter.textContent = users.length;
+            counter.style.cssText = 'margin-left: auto; background: #667eea; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem;';
+            voiceChannel.appendChild(counter);
+
+            // Добавляем список участников под каналом
+            const usersList = document.createElement('div');
+            usersList.className = 'voice-users-list';
+            usersList.style.cssText = 'padding-left: 30px; margin-top: 5px;';
+
+            users.forEach(user => {
+                const userDiv = document.createElement('div');
+                userDiv.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 0.8rem; color: #9ca3af;';
+                userDiv.innerHTML = `
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${user.avatar}" 
+                         style="width: 20px; height: 20px; border-radius: 50%;">
+                    <span>${user.username}</span>
+                `;
+                usersList.appendChild(userDiv);
+            });
+
+            // Вставляем после канала
+            voiceChannel.parentNode.insertBefore(usersList, voiceChannel.nextSibling);
+        }
+    });
+}
+
 // Инициализация Firebase
 if (window.FirebaseSync) {
     const firebaseReady = window.FirebaseSync.init();
-    
+
     if (firebaseReady) {
         console.log('✅ Используем Firebase для синхронизации');
-        
+
         // Устанавливаем статус онлайн
         currentUser.status = 'online';
         localStorage.setItem('currentUser', JSON.stringify(currentUser));
-        
+
         // Первое обновление - сразу добавляем пользователя
         window.FirebaseSync.updateUser(currentUser);
         console.log('👤 Пользователь добавлен в Firebase:', currentUser.username);
-        
+
         // Слушаем изменения пользователей
         window.FirebaseSync.getUsers((users) => {
             console.log('📡 Получены пользователи из Firebase:', users.length);
             displayMembers(users);
         });
-        
+
+        // Подписка на голосовые каналы для отображения участников
+        window.FirebaseSync.subscribeToAllVoiceChannels((channels) => {
+            console.log('🎙️ Обновление участников голосовых каналов');
+            updateVoiceChannelParticipants(channels);
+        });
+
         // Обновляем текущего пользователя каждые 10 секунд
         setInterval(() => {
             if (currentUser) {
                 currentUser.status = 'online';
                 window.FirebaseSync.updateUser(currentUser);
-                console.log('🔄 Обновление активности пользователя');
             }
         }, 10000);
-        
+
     } else {
         console.log('⚠️ Firebase недоступен, используем localStorage');
         initLocalSync();
@@ -889,7 +941,7 @@ function initLocalSync() {
         window.ModernChatAPI.initSync();
         window.addEventListener('usersUpdated', updateMembersList);
     }
-    
+
     // Обновление активности при любом действии
     document.addEventListener('click', () => {
         if (window.ModernChatAPI) {
@@ -904,4 +956,4 @@ setInterval(updateMembersList, 5000);
 console.log('ModernChat загружен! 🚀');
 console.log('Текущий пользователь:', currentUser.username);
 console.log('WebRTC поддерживается:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
-console.log('WebRTC поддерживается:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+
