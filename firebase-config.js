@@ -2,14 +2,16 @@
 // ВАЖНО: Замените YOUR_CONFIG на свои данные из Firebase Console
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-    authDomain: "modernchat-xxxxx.firebaseapp.com",
-    databaseURL: "https://modernchat-xxxxx-default-rtdb.firebaseio.com",
-    projectId: "modernchat-xxxxx",
-    storageBucket: "modernchat-xxxxx.appspot.com",
-    messagingSenderId: "123456789012",
-    appId: "1:123456789012:web:xxxxxxxxxxxxx"
+  apiKey: "AIzaSyC7U1Nx9TtpEgQWWTNMLO2sY2sWbDkpc1c",
+  authDomain: "dfgdfgdfg-1973e.firebaseapp.com",
+  databaseURL: "https://dfgdfgdfg-1973e-default-rtdb.firebaseio.com",
+  projectId: "dfgdfgdfg-1973e",
+  storageBucket: "dfgdfgdfg-1973e.firebasestorage.app",
+  messagingSenderId: "921987023467",
+  appId: "1:921987023467:web:fe94649da3f540c9cfe72e"
 };
+console.log('Firebase config loaded');
+console.log('Database URL:', firebaseConfig.databaseURL);
 
 // Инициализация Firebase
 let database = null;
@@ -43,7 +45,12 @@ function initFirebase() {
 
 // Обновление пользователя в Firebase
 function updateUserInFirebase(user) {
-    if (!usersRef) return;
+    if (!usersRef) {
+        console.error('❌ usersRef не инициализирован');
+        return;
+    }
+    
+    console.log('📝 Попытка записать пользователя:', user.username);
     
     const userKey = user.email.replace(/[.#$[\]]/g, '_');
     usersRef.child(userKey).set({
@@ -52,16 +59,27 @@ function updateUserInFirebase(user) {
         avatar: user.avatar,
         status: user.status || 'online',
         lastSeen: firebase.database.ServerValue.TIMESTAMP
+    }).then(() => {
+        console.log('✅ Пользователь успешно записан в Firebase');
+    }).catch((error) => {
+        console.error('❌ Ошибка записи пользователя:', error);
     });
 }
 
 // Получение всех пользователей из Firebase
 function getUsersFromFirebase(callback) {
-    if (!usersRef) return;
+    if (!usersRef) {
+        console.error('❌ usersRef не инициализирован для чтения');
+        return;
+    }
+    
+    console.log('👂 Подписка на изменения пользователей');
     
     usersRef.on('value', (snapshot) => {
         const users = [];
         const now = Date.now();
+        
+        console.log('📡 Получен snapshot:', snapshot.val());
         
         snapshot.forEach((childSnapshot) => {
             const user = childSnapshot.val();
@@ -74,7 +92,10 @@ function getUsersFromFirebase(callback) {
             users.push(user);
         });
         
+        console.log('👥 Обработано пользователей:', users.length);
         callback(users);
+    }, (error) => {
+        console.error('❌ Ошибка чтения пользователей:', error);
     });
 }
 
