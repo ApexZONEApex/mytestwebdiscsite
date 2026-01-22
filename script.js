@@ -52,11 +52,21 @@ updateUserInfo();
 
 // Обновление списка участников
 function updateMembersList() {
-    // Используем API для проверки активности
-    const allUsers = window.ModernChatAPI ? 
-        window.ModernChatAPI.checkUsersActivity() : 
-        getAllUsers();
-    
+    // Если Firebase доступен, используем его
+    if (window.FirebaseSync && typeof firebase !== 'undefined') {
+        window.FirebaseSync.getUsers((users) => {
+            displayMembers(users);
+        });
+    } else {
+        // Иначе используем localStorage
+        const allUsers = window.ModernChatAPI ? 
+            window.ModernChatAPI.checkUsersActivity() : 
+            getAllUsers();
+        displayMembers(allUsers);
+    }
+}
+
+function displayMembers(allUsers) {
     const onlineContainer = document.getElementById('onlineMembers');
     const offlineContainer = document.getElementById('offlineMembers');
     
@@ -708,24 +718,49 @@ document.querySelectorAll('.category-header').forEach(header => {
 displayChannelMessages(currentChannel);
 updateMembersList();
 
-// Инициализация API синхронизации
-if (window.ModernChatAPI) {
-    window.ModernChatAPI.initSync();
+// Инициализация Firebase
+if (window.FirebaseSync) {
+    const firebaseReady = window.FirebaseSync.init();
     
-    // Слушаем событие обновления пользователей
-    window.addEventListener('usersUpdated', updateMembersList);
+    if (firebaseReady) {
+        console.log('✅ Используем Firebase для синхронизации');
+        
+        // Обновляем текущего пользователя в Firebase
+        setInterval(() => {
+            if (currentUser) {
+                window.FirebaseSync.updateUser(currentUser);
+            }
+        }, 10000);
+        
+        // Первое обновление
+        window.FirebaseSync.updateUser(currentUser);
+    } else {
+        console.log('⚠️ Firebase недоступен, используем localStorage');
+        initLocalSync();
+    }
+} else {
+    initLocalSync();
+}
+
+function initLocalSync() {
+    // Инициализация API синхронизации
+    if (window.ModernChatAPI) {
+        window.ModernChatAPI.initSync();
+        window.addEventListener('usersUpdated', updateMembersList);
+    }
+    
+    // Обновление активности при любом действии
+    document.addEventListener('click', () => {
+        if (window.ModernChatAPI) {
+            window.ModernChatAPI.updateUserActivity();
+        }
+    });
 }
 
 // Обновление списка участников каждые 5 секунд
 setInterval(updateMembersList, 5000);
 
-// Обновление активности при любом действии
-document.addEventListener('click', () => {
-    if (window.ModernChatAPI) {
-        window.ModernChatAPI.updateUserActivity();
-    }
-});
-
 console.log('ModernChat загружен! 🚀');
 console.log('Текущий пользователь:', currentUser.username);
+console.log('WebRTC поддерживается:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
 console.log('WebRTC поддерживается:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
