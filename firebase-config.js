@@ -276,21 +276,55 @@ function leaveVoiceChannelFirebase(channelName, user) {
     voiceChannelsRef.child(encodedChannel).child(userKey).remove();
 }
 
+// Хранение активных слушателей
+let currentVoiceChannelListener = null;
+let currentVoiceChannelPath = null;
+
 // Получение участников голосового канала
 function getVoiceChannelUsers(channelName, callback) {
     if (!voiceChannelsRef) return;
 
+    // Если уже есть слушатель на этом канале, не создаем новый
+    if (currentVoiceChannelPath === channelName && currentVoiceChannelListener) {
+        console.log('ℹ️ Слушатель для этого канала уже активен');
+        return;
+    }
+
+    // Отписываемся от предыдущего, если есть
+    if (currentVoiceChannelListener && currentVoiceChannelPath) {
+        unsubscribeFromVoiceChannel();
+    }
+
     const encodedChannel = encodeChannelName(channelName);
-    voiceChannelsRef.child(encodedChannel).on('value', (snapshot) => {
+    const channelRef = voiceChannelsRef.child(encodedChannel);
+
+    currentVoiceChannelPath = channelName;
+    currentVoiceChannelListener = channelRef.on('value', (snapshot) => {
         const users = [];
+        const now = Date.now();
+        const maxAge = 60000;
 
         snapshot.forEach((childSnapshot) => {
-            users.push(childSnapshot.val());
+            const user = childSnapshot.val();
+            if (user.timestamp && (now - user.timestamp) < maxAge) {
+                users.push(user);
+            }
         });
 
-        console.log('🎧 Участников в голосовом канале', channelName + ':', users.length);
+        console.log('🎧 Слушатель канала получил обновление:', users.length, 'участников');
         callback(users);
     });
+}
+
+// Отписка от слушателя голосового канала
+function unsubscribeFromVoiceChannel() {
+    if (currentVoiceChannelListener && currentVoiceChannelPath && voiceChannelsRef) {
+        const encodedChannel = encodeChannelName(currentVoiceChannelPath);
+        voiceChannelsRef.child(encodedChannel).off('value', currentVoiceChannelListener);
+        console.log('🔕 Отписка от голосового канала:', currentVoiceChannelPath);
+        currentVoiceChannelListener = null;
+        currentVoiceChannelPath = null;
+    }
 }
 
 // Подписка на ВСЕ голосовые каналы для отображения участников в боковой панели
@@ -353,6 +387,7 @@ window.FirebaseSync = {
     joinVoiceChannel: joinVoiceChannelFirebase,
     leaveVoiceChannel: leaveVoiceChannelFirebase,
     getVoiceChannelUsers: getVoiceChannelUsers,
+    unsubscribeFromVoiceChannel: unsubscribeFromVoiceChannel,
     subscribeToAllVoiceChannels: subscribeToAllVoiceChannels,
     updateVoiceState: updateVoiceState,
     disconnect: disconnectFromFirebase

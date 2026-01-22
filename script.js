@@ -351,8 +351,12 @@ function leaveVoiceChannel() {
     }
 
     // Удаляем из Firebase
-    if (window.FirebaseSync && typeof firebase !== 'undefined' && currentVoiceChannel) {
-        window.FirebaseSync.leaveVoiceChannel(currentVoiceChannel, currentUser);
+    if (window.FirebaseSync && typeof firebase !== 'undefined') {
+        if (currentVoiceChannel) {
+            window.FirebaseSync.leaveVoiceChannel(currentVoiceChannel, currentUser);
+        }
+        // Отписываемся от обновлений
+        window.FirebaseSync.unsubscribeFromVoiceChannel();
     }
 
     // Остановка всех потоков
@@ -525,10 +529,11 @@ async function toggleMicrophone() {
         window.FirebaseSync.updateVoiceState(currentVoiceChannel, currentUser, {
             micEnabled: micEnabled
         });
+    } else {
+        updateVoiceParticipants();
     }
 
     updateVoiceControls();
-    updateVoiceParticipants();
     updatePanelControls();
 }
 
@@ -594,11 +599,20 @@ async function toggleCameraFunc() {
             }
         } catch (error) {
             console.error('Ошибка при выключении камеры:', error);
+            cameraEnabled = true;
         }
     }
 
+    // Обновляем состояние в Firebase
+    if (window.FirebaseSync && typeof firebase !== 'undefined' && currentVoiceChannel) {
+        window.FirebaseSync.updateVoiceState(currentVoiceChannel, currentUser, {
+            cameraEnabled: cameraEnabled
+        });
+    } else {
+        updateVoiceParticipants();
+    }
+
     updateVoiceControls();
-    updateVoiceParticipants();
     updatePanelControls();
 }
 
@@ -680,8 +694,12 @@ async function toggleScreenShare() {
         }
     }
 
+    /* Локальное обновление не нужно, если есть Firebase - ждем синхронизации (хотя экран пока не синхронизируется) */
+    if (!window.FirebaseSync || typeof firebase === 'undefined') {
+        updateVoiceParticipants();
+    }
+
     updateVoiceControls();
-    updateVoiceParticipants();
     updatePanelControls();
 }
 
@@ -863,50 +881,59 @@ displayChannelMessages(currentChannel);
 updateMembersList();
 
 // Функция обновления отображения участников голосовых каналов в боковой панели
+// Debounce для обновления списка участников (защита от частых перерисовок)
+let updateVoiceTimeout;
 function updateVoiceChannelParticipants(channels) {
-    // Сначала удаляем ВСЕ старые списки участников
-    document.querySelectorAll('.voice-users-list').forEach(el => el.remove());
+    if (updateVoiceTimeout) clearTimeout(updateVoiceTimeout);
 
-    document.querySelectorAll('.channel.voice').forEach(voiceChannel => {
-        const channelName = voiceChannel.querySelector('span').textContent;
+    updateVoiceTimeout = setTimeout(() => {
+        // Жесткая очистка всех списков перед новой отрисовкой
+        document.querySelectorAll('.voice-users-list').forEach(el => el.remove());
+        document.querySelectorAll('.voice-users-count').forEach(el => el.remove());
 
-        // Ищем участников по закодированному имени канала
-        const encodedName = encodeURIComponent(channelName).replace(/[.#$[\]]/g, '_');
-        const users = channels[encodedName] || [];
+        document.querySelectorAll('.channel.voice').forEach(voiceChannel => {
+            const channelName = voiceChannel.querySelector('span').textContent;
+            const encodedName = encodeURIComponent(channelName).replace(/[.#$[\]]/g, '_');
+            const users = channels[encodedName] || [];
 
-        // Удаляем старый счётчик если есть
-        const oldCounter = voiceChannel.querySelector('.voice-users-count');
-        if (oldCounter) oldCounter.remove();
+            if (users.length > 0) {
+                // Добавляем счётчик
+                const counter = document.createElement('span');
+                counter.className = 'voice-users-count';
+                counter.textContent = users.length;
+                counter.style.cssText = 'margin-left: auto; background: #667eea; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem;';
+                voiceChannel.appendChild(counter);
 
-        if (users.length > 0) {
-            // Добавляем счётчик участников
-            const counter = document.createElement('span');
-            counter.className = 'voice-users-count';
-            counter.textContent = users.length;
-            counter.style.cssText = 'margin-left: auto; background: #667eea; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem;';
-            voiceChannel.appendChild(counter);
+                // Добавляем список участников
+                const usersList = document.createElement('div');
+                usersList.className = 'voice-users-list';
+                usersList.setAttribute('data-channel', encodedName);
+                usersList.style.cssText = 'padding-left: 30px; margin-top: 5px;';
 
-            // Добавляем список участников под каналом
-            const usersList = document.createElement('div');
-            usersList.className = 'voice-users-list';
-            usersList.setAttribute('data-channel', encodedName);
-            usersList.style.cssText = 'padding-left: 30px; margin-top: 5px;';
+                // Используем Set для уникальности пользователей по email/username
+                const uniqueUsers = new Map();
+                users.forEach(user => uniqueUsers.set(user.email, user));
 
-            users.forEach(user => {
-                const userDiv = document.createElement('div');
-                userDiv.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 0.8rem; color: #9ca3af;';
-                userDiv.innerHTML = `
-                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${user.avatar}" 
-                         style="width: 20px; height: 20px; border-radius: 50%;">
-                    <span>${user.username}</span>
-                `;
-                usersList.appendChild(userDiv);
-            });
+                uniqueUsers.forEach(user => {
+                    const userDiv = document.createElement('div');
+                    userDiv.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 0.8rem; color: #9ca3af;';
+                    userDiv.innerHTML = `
+                        <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${user.avatar}" 
+                             style="width: 20px; height: 20px; border-radius: 50%;">
+                        <span>${user.username}</span>
+                        ${!user.micEnabled ? '🔇' : ''}
+                    `;
+                    usersList.appendChild(userDiv);
+                });
 
-            // Вставляем после канала
-            voiceChannel.parentNode.insertBefore(usersList, voiceChannel.nextSibling);
-        }
-    });
+                // Вставляем ТОЛЬКО если следующего элемента нет или он не наш список
+                const nextEl = voiceChannel.nextElementSibling;
+                if (!nextEl || !nextEl.classList.contains('voice-users-list')) {
+                    voiceChannel.parentNode.insertBefore(usersList, voiceChannel.nextSibling);
+                }
+            }
+        });
+    }, 100); // 100мс задержка
 }
 
 // Инициализация Firebase
