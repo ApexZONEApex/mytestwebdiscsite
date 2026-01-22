@@ -123,39 +123,73 @@ function displayChannelMessages(channelName) {
     const messagesContainer = document.getElementById('messagesContainer');
     messagesContainer.innerHTML = '';
     
-    const messages = getChannelMessages(channelName);
-    
-    if (messages.length === 0) {
-        const emptyDiv = document.createElement('div');
-        emptyDiv.className = 'empty-channel';
-        emptyDiv.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
-            </svg>
-            <h3>Добро пожаловать в #${channelName}!</h3>
-            <p>Это начало канала #${channelName}. Начните общение!</p>
-        `;
-        messagesContainer.appendChild(emptyDiv);
-        return;
+    // Если Firebase доступен, используем его
+    if (window.FirebaseSync && typeof firebase !== 'undefined') {
+        // Отписываемся от предыдущего канала
+        if (window.currentChannelListener) {
+            // Firebase автоматически управляет подписками
+        }
+        
+        window.FirebaseSync.getMessages(channelName, (messages) => {
+            messagesContainer.innerHTML = '';
+            
+            if (messages.length === 0) {
+                showEmptyChannel(channelName);
+                return;
+            }
+            
+            messages.forEach(msg => {
+                addMessageToDOM(msg);
+            });
+            
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        });
+    } else {
+        // Используем localStorage
+        const messages = getChannelMessages(channelName);
+        
+        if (messages.length === 0) {
+            showEmptyChannel(channelName);
+            return;
+        }
+        
+        messages.forEach(msg => {
+            addMessageToDOM(msg);
+        });
+        
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
-    
-    messages.forEach(msg => {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'message';
-        messageDiv.innerHTML = `
-            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${msg.avatar}" alt="Avatar" class="message-avatar">
-            <div class="message-content">
-                <div class="message-header">
-                    <span class="message-author">${msg.author}</span>
-                    <span class="message-time">${msg.time}</span>
-                </div>
-                <div class="message-text">${msg.text}</div>
+}
+
+function showEmptyChannel(channelName) {
+    const messagesContainer = document.getElementById('messagesContainer');
+    const emptyDiv = document.createElement('div');
+    emptyDiv.className = 'empty-channel';
+    emptyDiv.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+        </svg>
+        <h3>Добро пожаловать в #${channelName}!</h3>
+        <p>Это начало канала #${channelName}. Начните общение!</p>
+    `;
+    messagesContainer.appendChild(emptyDiv);
+}
+
+function addMessageToDOM(msg) {
+    const messagesContainer = document.getElementById('messagesContainer');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message';
+    messageDiv.innerHTML = `
+        <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${msg.avatar}" alt="Avatar" class="message-avatar">
+        <div class="message-content">
+            <div class="message-header">
+                <span class="message-author">${msg.author}</span>
+                <span class="message-time">${msg.time}</span>
             </div>
-        `;
-        messagesContainer.appendChild(messageDiv);
-    });
-    
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            <div class="message-text">${msg.text}</div>
+        </div>
+    `;
+    messagesContainer.appendChild(messageDiv);
 }
 
 // Отправка сообщения
@@ -180,11 +214,22 @@ function sendMessage(text) {
         userId: currentUser.email
     };
     
-    const messages = getChannelMessages(currentChannel);
-    messages.push(message);
-    saveChannelMessages(currentChannel, messages);
+    console.log('📤 Отправка сообщения:', message);
+    console.log('📍 Текущий канал:', currentChannel);
+    console.log('🔥 Firebase доступен:', !!(window.FirebaseSync && typeof firebase !== 'undefined'));
     
-    displayChannelMessages(currentChannel);
+    // Если Firebase доступен, используем его
+    if (window.FirebaseSync && typeof firebase !== 'undefined') {
+        console.log('✅ Используем Firebase для сообщения');
+        window.FirebaseSync.saveMessage(currentChannel, message);
+    } else {
+        console.log('⚠️ Используем localStorage для сообщения');
+        // Иначе используем localStorage
+        const messages = getChannelMessages(currentChannel);
+        messages.push(message);
+        saveChannelMessages(currentChannel, messages);
+        displayChannelMessages(currentChannel);
+    }
 }
 
 function escapeHtml(text) {
@@ -250,6 +295,17 @@ async function joinVoiceChannel(channelName, channelElement) {
         inVoiceChannel = true;
         currentVoiceChannel = channelName;
         
+        // Добавляем в Firebase
+        if (window.FirebaseSync && typeof firebase !== 'undefined') {
+            window.FirebaseSync.joinVoiceChannel(channelName, currentUser);
+            
+            // Слушаем участников канала
+            window.FirebaseSync.getVoiceChannelUsers(channelName, (users) => {
+                console.log('🎧 Участники голосового канала:', users);
+                updateVoiceParticipantsFromFirebase(users);
+            });
+        }
+        
         // Визуальное обозначение
         document.querySelectorAll('.channel.voice').forEach(ch => {
             ch.classList.remove('in-voice');
@@ -275,6 +331,11 @@ async function joinVoiceChannel(channelName, channelElement) {
 
 function leaveVoiceChannel() {
     if (!inVoiceChannel) return;
+    
+    // Удаляем из Firebase
+    if (window.FirebaseSync && typeof firebase !== 'undefined' && currentVoiceChannel) {
+        window.FirebaseSync.leaveVoiceChannel(currentVoiceChannel, currentUser);
+    }
     
     // Остановка всех потоков
     if (localStream) {
@@ -386,6 +447,47 @@ function updateVoiceParticipants() {
     }
 }
 
+function updateVoiceParticipantsFromFirebase(users) {
+    const container = document.getElementById('voiceParticipants');
+    container.innerHTML = '';
+    
+    users.forEach(user => {
+        const isCurrentUser = user.email === currentUser.email;
+        const participantDiv = document.createElement('div');
+        participantDiv.className = 'voice-participant';
+        participantDiv.innerHTML = `
+            ${isCurrentUser && cameraEnabled ? 
+                '<video id="localVideo" autoplay muted playsinline></video>' : 
+                ''
+            }
+            <div class="participant-info">
+                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${user.avatar}" alt="Avatar">
+                <div class="participant-details">
+                    <span class="participant-name">${user.username}${isCurrentUser ? ' (Вы)' : ''}</span>
+                    <div class="participant-status">
+                        ${user.micEnabled ? 
+                            '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/></svg>' : 
+                            '<svg class="status-icon muted" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>'
+                        }
+                        ${user.cameraEnabled ? 
+                            '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>' : ''
+                        }
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(participantDiv);
+    });
+    
+    // Подключить локальный поток к видео
+    if (cameraEnabled && localStream) {
+        const videoElement = document.getElementById('localVideo');
+        if (videoElement) {
+            videoElement.srcObject = localStream;
+        }
+    }
+}
+
 // Управление микрофоном
 async function toggleMicrophone() {
     if (!localStream) {
@@ -398,6 +500,13 @@ async function toggleMicrophone() {
     if (audioTrack) {
         audioTrack.enabled = micEnabled;
         console.log('Микрофон:', micEnabled ? 'включен' : 'выключен');
+    }
+    
+    // Обновляем состояние в Firebase
+    if (window.FirebaseSync && typeof firebase !== 'undefined' && currentVoiceChannel) {
+        window.FirebaseSync.updateVoiceState(currentVoiceChannel, currentUser, {
+            micEnabled: micEnabled
+        });
     }
     
     updateVoiceControls();

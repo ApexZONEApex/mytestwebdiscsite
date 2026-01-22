@@ -16,6 +16,8 @@ console.log('🌐 Database URL:', firebaseConfig.databaseURL);
 // Глобальные переменные
 let database = null;
 let usersRef = null;
+let messagesRef = null;
+let voiceChannelsRef = null;
 
 // Инициализация Firebase
 function initFirebase() {
@@ -43,6 +45,12 @@ function initFirebase() {
         
         usersRef = database.ref('users');
         console.log('✅ Users reference получен');
+        
+        messagesRef = database.ref('messages');
+        console.log('✅ Messages reference получен');
+        
+        voiceChannelsRef = database.ref('voiceChannels');
+        console.log('✅ Voice channels reference получен');
         
         // Тестовая запись
         testFirebaseConnection();
@@ -158,6 +166,104 @@ function disconnectFromFirebase() {
     }
 }
 
+// Сохранение сообщения в Firebase
+function saveMessageToFirebase(channel, message) {
+    if (!messagesRef) {
+        console.error('❌ messagesRef не инициализирован');
+        return;
+    }
+    
+    console.log('💬 Сохранение сообщения в канал:', channel);
+    
+    messagesRef.child(channel).push({
+        author: message.author,
+        avatar: message.avatar,
+        text: message.text,
+        time: message.time,
+        userId: message.userId,
+        timestamp: Date.now()
+    }).then(() => {
+        console.log('✅ Сообщение сохранено');
+    }).catch((error) => {
+        console.error('❌ Ошибка сохранения сообщения:', error);
+    });
+}
+
+// Получение сообщений канала из Firebase
+function getMessagesFromFirebase(channel, callback) {
+    if (!messagesRef) {
+        console.error('❌ messagesRef не инициализирован');
+        return;
+    }
+    
+    console.log('📨 Подписка на сообщения канала:', channel);
+    
+    messagesRef.child(channel).on('value', (snapshot) => {
+        const messages = [];
+        
+        snapshot.forEach((childSnapshot) => {
+            messages.push(childSnapshot.val());
+        });
+        
+        console.log('📬 Получено сообщений:', messages.length);
+        callback(messages);
+    });
+}
+
+// Добавление пользователя в голосовой канал
+function joinVoiceChannelFirebase(channelName, user) {
+    if (!voiceChannelsRef) {
+        console.error('❌ voiceChannelsRef не инициализирован');
+        return;
+    }
+    
+    console.log('🎤 Подключение к голосовому каналу:', channelName);
+    
+    const userKey = user.email.replace(/[.#$[\]]/g, '_');
+    voiceChannelsRef.child(channelName).child(userKey).set({
+        username: user.username,
+        email: user.email,
+        avatar: user.avatar,
+        micEnabled: true,
+        cameraEnabled: false,
+        timestamp: Date.now()
+    });
+}
+
+// Выход из голосового канала
+function leaveVoiceChannelFirebase(channelName, user) {
+    if (!voiceChannelsRef) return;
+    
+    console.log('🔇 Выход из голосового канала:', channelName);
+    
+    const userKey = user.email.replace(/[.#$[\]]/g, '_');
+    voiceChannelsRef.child(channelName).child(userKey).remove();
+}
+
+// Получение участников голосового канала
+function getVoiceChannelUsers(channelName, callback) {
+    if (!voiceChannelsRef) return;
+    
+    voiceChannelsRef.child(channelName).on('value', (snapshot) => {
+        const users = [];
+        
+        snapshot.forEach((childSnapshot) => {
+            users.push(childSnapshot.val());
+        });
+        
+        console.log('🎧 Участников в голосовом канале:', users.length);
+        callback(users);
+    });
+}
+
+// Обновление состояния в голосовом канале
+function updateVoiceState(channelName, user, state) {
+    if (!voiceChannelsRef) return;
+    
+    const userKey = user.email.replace(/[.#$[\]]/g, '_');
+    voiceChannelsRef.child(channelName).child(userKey).update(state);
+}
+
 // Автоматическое отключение при закрытии страницы
 window.addEventListener('beforeunload', disconnectFromFirebase);
 
@@ -166,6 +272,12 @@ window.FirebaseSync = {
     init: initFirebase,
     updateUser: updateUserInFirebase,
     getUsers: getUsersFromFirebase,
+    saveMessage: saveMessageToFirebase,
+    getMessages: getMessagesFromFirebase,
+    joinVoiceChannel: joinVoiceChannelFirebase,
+    leaveVoiceChannel: leaveVoiceChannelFirebase,
+    getVoiceChannelUsers: getVoiceChannelUsers,
+    updateVoiceState: updateVoiceState,
     disconnect: disconnectFromFirebase
 };
 
